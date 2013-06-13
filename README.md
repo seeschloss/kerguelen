@@ -1,2 +1,2 @@
-kerguelen
+Kerguelen toponymy
 =========

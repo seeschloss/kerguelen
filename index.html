@@ -132,7 +132,6 @@ input[type=range] {
 <script src="d3.v3.min.js"></script>
 <script src="topojson.v1.js"></script>
 <script src="d3.hexbin.v0.min.js"></script>
-<script src="fisheye.js"></script>
 <script src="queue.v1.min.js"></script>
 <script src="html5slider.js"></script>
 
@@ -196,36 +195,8 @@ var canvas = d3.select("body").append("canvas")
     .attr("width", width)
     .attr("height", height)[0][0].getContext('2d');
 
-var fisheye = d3.fisheye.circular()
-	.radius(75)
-	.distortion(5);
-
-	/*
-svg.on("mousemove", function() {
-	fisheye.focus(d3.mouse(this));
-	svg.selectAll('.place')
-		.each(function(d) {
-			d.xy = projection(d.geometry.coordinates);
-			d.fisheye = fisheye({x: d.xy[0], y: d.xy[1]});
-		})
-		.attr("transform", function(d) {return "translate(" + [d.fisheye.x, d.fisheye.y] + ")"})
-		.attr("r", function(d) {return radius(d) + Math.pow(d.fisheye.z, 1.5) * 0.5});
-
-	svg.selectAll('.border')
-		.attr("d", path)
-});
-*/
-
-var path = function(d) {
-    var p = d3.geo.path()
-        .projection(function(p) {
-            var a = projection(p);
-            var f = fisheye({x: a[0], y: a[1]});
-            return [f.x, f.y];
-        });
-
-    return p(d);
-}
+var path = d3.geo.path()
+    .projection(projection);
 
 queue()
     .defer(d3.json, "ele.topojson")
