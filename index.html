@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<head>
+<style>
+#about {
+    position: absolute;
+    color: #CCC;
+    z-index: 420000;
+    cursor: default;
+	top: 5px;
+}
+
+#about div {
+    overflow: hidden;
+    height: 0;
+    background: #333;
+    width: 0;
+}
+
+#about .help {
+    color: white;
+    font-style: italic;
+}
+
+#about a[href^=mailto] {
+    font-size: 75%;
+}
+
+#about:hover a {
+    color: white;
+}
+
+#about:hover div {
+    width: 400px;
+    height: auto;
+    border: 1px solid #666;
+    padding: 1ex;
+    hyphens: auto;
+    -webkit-hyphens: auto;
+    -moz-hyphens: auto;
+}
+
+body {
+    background: black;
+	padding-top: 50px;
+}
+
+#title {
+	position: absolute;
+	top: 10px;
+	color: white;
+	font-style: italic;
+	text-align: center;
+	font-variant: small-caps;
+	width: 100%;
+	font-size: 35px;
+	font-weight: bold;
+}
+
+.place-span {
+    border-radius: 2px;
+    height: 2px;
+    width: 2px;
+    position: fixed;
+    margin-top: 50px;
+}
+
+.place-span:hover {
+    border: 0.01px solid grey;
+}
+
+svg, canvas, div.markers {
+	position: absolute;
+	top: 50px;
+}
+
+.label {
+    font-size: 20px;
+    fill: white;
+}
+
+.place {
+	fill: white;
+	stroke: grey;
+	stroke-width: 1px;
+}
+
+.place:hover {
+	fill: white;
+	stroke: grey !important;
+	stroke-width: 5px !important;
+}
+
+form {
+	text-align: center;
+	color: white;
+}
+
+form p {
+	margin: 0;
+}
+
+input[type=range] {
+	width: 500px;
+}
+
+.axis {
+	fill: white;
+}
+
+.layer {
+	cursor: pointer;
+}
+
+.layer:hover {
+	fill: grey !important;
+}
+
+</style>
+</head>
+<body>
+<div id="title">Îles Kerguelen</div>
+<div id="about">
+    <a>À propos</a>
+    <div lang="en">
+        <p>Toponymes des <a href="http://fr.wikipedia.org/wiki/%C3%8Eles_Kerguelen">îles Kerguelen</a>, leurs auteurs et dates d'attribution.</p>
+        <p class="help">Les point les plus gros et lumineux sont ceux qui ont été attribués approximativement l'année sélectionnée par le slider, ou par la personne choisie sur le graphique du bas.</p>
+        <p>Données tirées de l'ouvrage <a href="http://www.sudoc.fr/001369938">Toponymie des Terres Australes</a> (plus ou moins introuvable en dehors de la BNF), de Mme Gracie Delépine.
+        <p><a href="mailto:see@seos.fr">Contact</a></p>
+        </div>
+</div>
+
+<script src="d3.v3.min.js"></script>
+<script src="topojson.v1.js"></script>
+<script src="d3.hexbin.v0.min.js"></script>
+<script src="fisheye.js"></script>
+<script src="queue.v1.min.js"></script>
+<script src="html5slider.js"></script>
+
+<form>
+	<input name="year" type="range" min="1772" max="1971" value="1772" />
+	<p>Noms donnés <label for="year">en 1772</label></p>
+</form>
+
+<script>
+
+var dom = typeof InstallTrigger != 'undefined';
+
+var year = 1772;
+
+d3.select('input').on("change", function() {
+    year = this.value;
+    d3.select('label').text("en " + year);
+
+    if (dom) {
+        div.selectAll(".place-span")
+            .each(function(d) {
+                d.diff = Math.abs(d.properties.date - year);
+                d.r = radius(d);
+            })
+            .style("background-color", color)
+            .style("-webkit-transform", function(d) {return "scale(" + d.r + ")";})
+            .style("-moz-transform", function(d) {return "scale(" + d.r + ")";})
+            .style("-o-transform", function(d) {return "scale(" + d.r + ")";})
+            .style("transform", function(d) {return "scale(" + d.r + ")";})
+    } else {
+        svg.selectAll('.place')
+            .each(function(d) { d.diff = Math.abs(d.properties.date - year); })
+            .attr("r", radius)
+            .style("fill", color)
+    }
+});
+
+var width = window.innerWidth - 30,
+    height = window.innerHeight - 80;
+
+var projection = d3.geo.stereographic()
+    .center([0, 0])
+	.rotate([-69.5, 49.2])
+    .scale(50000 * Math.min(width/900, height/750))
+    .translate([width/2, height/2])
+	.clipAngle(90);
+
+var div = d3.select("body").append("div")
+    .attr("class", "markers")
+    .attr("width", width)
+    .attr("height", height)
+	.style("z-index", "0");
+
+var svg = d3.select("body").append("svg")
+    .attr("width", width)
+    .attr("height", height)
+	.style("z-index", "-1");
+
+var canvas = d3.select("body").append("canvas")
+	.style("z-index", "-2")
+    .attr("width", width)
+    .attr("height", height)[0][0].getContext('2d');
+
+var fisheye = d3.fisheye.circular()
+	.radius(75)
+	.distortion(5);
+
+	/*
+svg.on("mousemove", function() {
+	fisheye.focus(d3.mouse(this));
+	svg.selectAll('.place')
+		.each(function(d) {
+			d.xy = projection(d.geometry.coordinates);
+			d.fisheye = fisheye({x: d.xy[0], y: d.xy[1]});
+		})
+		.attr("transform", function(d) {return "translate(" + [d.fisheye.x, d.fisheye.y] + ")"})
+		.attr("r", function(d) {return radius(d) + Math.pow(d.fisheye.z, 1.5) * 0.5});
+
+	svg.selectAll('.border')
+		.attr("d", path)
+});
+*/
+
+var path = function(d) {
+    var p = d3.geo.path()
+        .projection(function(p) {
+            var a = projection(p);
+            var f = fisheye({x: a[0], y: a[1]});
+            return [f.x, f.y];
+        });
+
+    return p(d);
+}
+
+queue()
+    .defer(d3.json, "ele.topojson")
+    .defer(d3.json, "coast.topojson")
+    .defer(d3.json, "points.topojson")
+    .defer(d3.tsv, "stats.tsv")
+    .await(function(error, elejson, coastjson, pointsjson, stats) {
+
+        stats.forEach(function(d) {
+            d.n = +d.n;
+        });
+
+        var stack = d3.layout.stack()
+            .offset("zero")
+            .values(function(d) {return d.values})
+            .x(function(d) { return d.annee; })
+            .y(function(d) { return d.n; });
+
+        var x = d3.scale.linear()
+            .domain([1750, 1975])
+            .range([0, width]);
+
+        var y = d3.scale.linear()
+            .domain([1, 500])
+            .range([height - 25, 50]);
+
+        var xAxis = d3.svg.axis()
+            .scale(x)
+            .orient("top")
+            .tickFormat(function(d) {return d});
+
+        var nest = d3.nest()
+            .key(function(d) {return d.nom})
+
+        var layers = stack(nest.entries(stats));
+        var stream_color = d3.scale.linear()
+            .range(["#223", "#446"]);
+
+        var area = d3.svg.area()
+            .interpolate("basis")
+            .x(function(d) { return x(+d.annee); })
+            .y0(function(d) { return y(d.y0+1); })
+            .y1(function(d) { return y(d.y0 + d.y+1); });
+
+        svg.append("g").
+            selectAll("path")
+            .data(layers)
+            .enter().append("path")
+            .attr("class", "layer")
+            .attr("d", function(d) {return area(d.values)})
+            .style("fill", function() {return stream_color(Math.random())})
+                .append('title').text(function(d) { return d.key; });
+
+        svg.append("g")
+            .attr("class", "x axis")
+            .attr("transform", "translate(0," + (height - 20) + ")")
+            .call(xAxis)
+            .append("text")
+                .attr("class", "label")
+                .attr("x", width/2)
+                .attr("y", 5)
+                .attr("dy", ".71em")
+                .style("text-anchor", "middle")
+                .text("Année d'attribution");
+
+		svg.selectAll('.layer').on('mouseover', function(d, i) {
+            if (dom) {
+                div.selectAll(".place-span")
+                    .each(function(place) { place.highlight = (place.properties.par == d.key); })
+                    .style("background-color", color)
+                    .style("border", function(place) {return place.highlight ? "2px solid white" : "none";})
+            } else {
+                svg.selectAll('.place')
+                    .each(function(place) { place.highlight = (place.properties.par == d.key); })
+                    .style("stroke-width", function(place) { return place.highlight ? '2' : null; })
+                    .style("stroke", function(place) { return place.highlight ? 'white' : null; })
+            }
+        });
+
+		svg.selectAll('.layer').on('mouseout', function(d, i) {
+            if (dom) {
+                div.selectAll('.place-span')
+                    .style("border", null)
+            } else {
+                svg.selectAll('.place')
+                    .style("stroke-width", null)
+                    .style("stroke", null)
+            }
+        });
+
+        svg.selectAll('.layer').on('click', function(d, i) {
+            d3.select('label').text("par " + d.key);
+
+            if (dom) {
+                div.selectAll('.place-span')
+                    .each(function(place) {
+                        if (place.properties.par == d.key) {
+                            place.r = 5;
+                            place.color = 'white';
+                        } else {
+                            place.r = 0.5;
+                            place.color = 'black';
+                        }
+                    })
+                    .transition().duration(1000)
+                    .style("-webkit-transform", function(d) {return "scale(" + d.r + ")";})
+                    .style("-moz-transform", function(d) {return "scale(" + d.r + ")";})
+                    .style("-o-transform", function(d) {return "scale(" + d.r + ")";})
+                    .style("transform", function(d) {return "scale(" + d.r + ")";})
+                    .style("background-color", function(place) { return place.color })
+            } else {
+                svg.selectAll('.place')
+                    .each(function(place) { place.highlight = (place.properties.par == d.key); })
+                    .transition().duration(1000)
+                    .attr("r", function(place) {
+                        return place.highlight ? 5 : 0.5;
+                    })
+                    .style("fill", function(place) {
+                        return place.highlight ? 'white' : 'black';
+                    })
+            }
+
+			d3.event.stopPropagation();
+		});
+
+		svg.on('click', function(d, i) {
+			d3.select('label').text("en " + year);
+			svg.selectAll('.place')
+				.each(function(d) { d.diff = Math.abs(d.properties.date - year); })
+				.transition().duration(1000)
+				.attr("r", radius)
+				.style("fill", color)
+		});
+
+
+		d3.map(coastjson.objects).values().forEach(function(e) {
+			canvas.strokeStyle = "#224";
+            canvas.lineWidth = 20;
+			drawPath(topojson.feature(coastjson, e).features, canvas, false);
+		});
+
+		d3.map(elejson.objects).values().forEach(function(e) {
+			canvas.strokeStyle = "rgba(100, 100, 100, 0.5)";
+            canvas.lineWidth = 1;
+
+            var color = d3.scale.linear()
+                .range(['#5F6924', '#6E3C18', '#FFFFFF', '#FFFFFF'])
+                .domain([0, 100, 1000, 2000]);
+
+			drawPath(topojson.feature(elejson, e).features.reverse(), canvas, function(d) {return color(d.properties.ele)});
+		});
+
+		var places = topojson.feature(pointsjson, pointsjson.objects['points-dates']).features;
+
+        if (dom) {
+            div.selectAll("path")
+                    .data(places)
+                .enter().append("span")
+                    .each(function(d) {
+                        d.diff = Math.abs(d.properties.date - year);
+                        d.pos = projection(d.geometry.coordinates);
+                        d.r = radius(d);
+                    })
+                    .attr("class", "place-span")
+                    .style("background-color", color)
+                    .style("left", function(d) {return d.pos[0] + "px";})
+                    .style("top", function(d) {return d.pos[1] + "px";})
+                    .style("-webkit-transform", function(d) {return "scale(" + d.r + ")";})
+                    .style("-moz-transform", function(d) {return "scale(" + d.r + ")";})
+                    .style("-o-transform", function(d) {return "scale(" + d.r + ")";})
+                    .style("transform", function(d) {return "scale(" + d.r + ")";})
+                    .attr("title", title);
+        } else {
+            svg.append("g")
+                    .attr("class", "places")
+                .selectAll("path")
+                    .data(places)
+                .enter().append("circle")
+                    .each(function(d) { d.diff = Math.abs(d.properties.date - year); })
+                    .attr("class", "place")
+                    .attr("r", radius)
+                    .style("fill", color)
+                    .attr("transform", function(d) {return "translate(" + projection(d.geometry.coordinates) + ")"})
+                        .append('title')
+                            .text(title);
+        }
+
+
+});
+
+var log_scale = d3.scale.log()
+	.domain([1, 100, 1000])
+	.range(['white', '#222', '#222'])
+
+var log_radius_scale = d3.scale.log()
+	.domain([1, 40, 150, 1000])
+	.range([10, 1.5, 1, 1])
+
+var color = function(d) {
+	if (d.properties.date && d.properties.date != '?') {
+		return log_scale(d.diff + 1);
+	} else {
+		return 'grey';
+	}
+};
+
+var radius = function(d) {
+	if (d.properties.date && d.properties.date != '?') {
+		return log_radius_scale(d.diff + 1);
+	} else {
+		return 1;
+	}
+};
+
+var title = function(d) {
+	var hist = d.properties.par + ' ';
+	if (d.properties.date && d.properties.date != '?') {
+		hist += 'en ' + d.properties.date;
+	}
+
+	if (hist.length) {
+		hist = ' (' + hist.replace(/ *$/, '') + ')';
+	}
+	
+	return d.properties.nom + hist;
+};
+
+var drawPath = function(d, canvas, fill) {
+    d.forEach(function(d) {
+        canvas.beginPath();
+        if (fill) {
+            if (fill instanceof Function) {
+                canvas.fillStyle = fill(d).toString();
+            }
+        }
+        if (d.geometry.coordinates) d.geometry.coordinates.forEach(function(c, i) {
+            var coordinates = projection(c);
+            if (null == coordinates || coordinates == [NaN, NaN]) {
+                return;
+            }
+            if (i == 0) {
+                canvas.moveTo(coordinates[0], coordinates[1]);
+            } else {
+                canvas.lineTo(coordinates[0], coordinates[1]);
+            }
+        });
+        if (fill) {
+            canvas.closePath();
+            canvas.fill();
+        }
+        canvas.stroke();
+    });
+};
+
+
+</script>
+</body>
