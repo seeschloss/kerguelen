@@ -164,7 +164,7 @@ var dom = false; //typeof InstallTrigger != 'undefined';
 
 var year = 1772;
 
-d3.select('input').on("change", function() {
+d3.select('input').on("input", function() {
     year = this.value;
     d3.select('label').text("en " + year);
 
